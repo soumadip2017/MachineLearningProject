@@ -1,0 +1,174 @@
+---
+title: "Practical Machine Learning Project"
+author: "Soumadip Roy"
+date: "February 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prediction Assignment
+
+## Background 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Processing
+
+Load appropriate packages for the work to be performed.
+
+
+```{r pressure, warning=FALSE, message = FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(randomForest)
+```
+
+## Making Data Ready
+
+Downloading the two files and reading the files and performing the initial checks on the files so that they can be processed after being read as CSV files into R
+
+```{r warning=FALSE, message = FALSE}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile, method="libcurl")
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile, method="libcurl")
+}
+
+train <- read.csv("./data/pml-training.csv")
+test <- read.csv("./data/pml-testing.csv")
+dim(train)
+dim(test)
+```
+
+The training data set contains 19622 observations and 160 variables for each, while the testing data set contains 20 observations and 160 variables for each. 
+The "classe" variable in the training set is the outcome to predict and thus build the model.
+
+
+
+## Cleaning Data
+Determining the levels for "classe" field giving insights into the data.
+
+```{r warning=FALSE, message = FALSE}
+class.level = train[, "classe"]
+class.levels = class.level 
+levels(class.levels)
+```
+
+###Next steps:
+
+
+Taking out classe field so thast it can be added later after cleaning up of data is done
+
+```{r warning=FALSE, message = FALSE}
+train.classe <- train$classe 
+```
+
+As has been mentioned in the assignment that one only has to use data from accelerometers on the belt, forearm, arm, and dumbell, so the features are extracted based on these keywords. Thus 160 variables are not all required for the analysis and taking an important step towards building a better model.
+
+```{r warning=FALSE, message = FALSE}
+
+filter = grepl("belt|arm|dumbell", names(train))
+trainfltrd = train[, filter]
+testfltrd = test[, filter]
+
+dim(trainfltrd)
+dim(testfltrd)
+```
+
+All columns having NA missing values are removed so that we have a (taking test data in the previous step as reference)
+
+```{r warning=FALSE, message = FALSE}
+
+cols.without.na = colSums(is.na(testfltrd)) == 0
+trainclean <- trainfltrd[, cols.without.na] 
+testclean <- testfltrd[, cols.without.na] 
+
+```
+
+Converting all the fields/features/predictors to numeric so that Random Forest function can be applied later in the Data MOdelling phase 
+
+```{r warning=FALSE, message = FALSE}
+trainclean.num <- as.data.frame(lapply(trainclean, as.numeric))
+testclean.num <- as.data.frame(lapply(testclean, as.numeric))
+```
+
+Finalizing the train dataset by adding the classe field to it for model fitment
+```{r warning=FALSE, message = FALSE}
+trainclean.num$classe <- train.classe
+
+dim(trainclean.num)
+dim(testclean.num)
+```
+
+## Pre Processing
+So we end up with 39 relevant columns(features) in the data which we would pass through preprocessing and build the data modelling on.
+There are 5 classes in the outcome "A" "B" "C" "D" "E"
+
+
+Check with nearZeroVar function
+
+```{r warning=FALSE, message = FALSE}
+zero.var <- nearZeroVar(trainclean.num, saveMetrics = TRUE)
+zero.var
+```
+
+There are no predictors without variability. So there is feature or predictor to be removed further.
+
+## Building a Model 
+
+We would try to fit Random Forest algorithm because it automatically selects important variables and is robust to correlated covariates & outliers in general. 
+
+```{r warning=FALSE, message = FALSE}
+set.seed(22111)
+validsample <- createDataPartition(trainclean.num$classe, p=0.7, list = F)
+sampleData <- trainclean.num[-validsample,]
+dim(sampleData)
+```
+
+Running to generate  model on 70% of train data , rest 30% is left for Validation
+```{r warning=FALSE, message = FALSE}
+trainclean.num <- trainclean.num[validsample,]
+dim(trainclean.num)
+output.forest <- randomForest(classe ~ ., data = trainclean.num)
+output.forest
+```
+
+## Measuring accuracy using the Validation dataset
+```{r warning=FALSE, message = FALSE}
+
+predictrf <- predict(output.forest,sampleData )
+confusionMatrix(sampleData$classe,predictrf)
+accuracy <- postResample(predictrf,sampleData$classe)
+oose <- 1- as.numeric(confusionMatrix(sampleData$classe,predictrf)$overall[1])
+```
+
+### Accurancy and OOSE 
+```{r warning=FALSE, message = FALSE}
+accuracy
+oose
+
+```
+
+# Predicting for Test data set
+
+```{r warning=FALSE, message = FALSE}
+prdoutput <- predict(output.forest,testclean.num)
+prdoutput
+
+```
+
+
